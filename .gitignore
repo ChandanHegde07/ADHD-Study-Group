@@ -1,0 +1,39 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pkl
+*.sqlite3
+
+# Virtual environment
+venv/
+ENV/
+env/
+.venv/
+
+# Environment variables
+.env
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# VSCode settings
+.vscode/
+
+# MacOS
+.DS_Store
+
+# PyCharm
+.idea/
+
+# Logs
+*.log
+
+# Streamlit cache
+.streamlit/
+
+# Build / distribution
+build/
+dist/
+*.egg-info/
