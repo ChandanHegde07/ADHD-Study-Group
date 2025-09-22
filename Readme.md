@@ -10,9 +10,6 @@ By leveraging specialized AI agents, the platform provides **personalized motiva
 - **Motivational Agent**  
   A friendly and encouraging AI that provides positive reinforcement, celebrates small wins, and offers emotional support.
 
-- **Accountability Agent**  
-  A kind yet structured AI that assists with **task management, goal setting, and breaking down large assignments**, while gently nudging students toward completion.
-
 - **Teaching Agent**  
   A patient AI that explains concepts in **simple, digestible terms**, using analogies and multiple learning styles.
 
