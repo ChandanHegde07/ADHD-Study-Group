@@ -31,3 +31,7 @@ By leveraging specialized AI agents, the platform provides **personalized motiva
 - **Deployment (Planned)**: Streamlit Community Cloud  
 
 ---
+
+## Contributing
+
+ This is a personal project, but if you have ideas or suggestions, feel free to open an issue or reach out!
