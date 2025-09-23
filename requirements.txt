@@ -1,5 +1,5 @@
 streamlit
 langchain
 langgraph
-google-generativeai # For interacting with Google's Gemini models
-python-dotenv       # For loading environment variables from a .env file
+google-generativeai
+python-dotenv       
