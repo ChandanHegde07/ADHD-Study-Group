@@ -26,7 +26,7 @@ By leveraging specialized AI agents, the platform provides **personalized motiva
 - **Programming Language**: Python  
 - **Frontend / Web Framework**: [Streamlit](https://streamlit.io/)  
 - **AI Agent Orchestration**: [LangChain](https://www.langchain.com/) / LangGraph  
-- **Large Language Model (LLM)**: OpenAI GPT models (or Gemini Model)  
+- **Large Language Model (LLM)**: Gemini Model (or OpenAI GPT models)  
 - **Version Control**: Git & GitHub  
 - **Deployment (Planned)**: Streamlit Community Cloud  
 
