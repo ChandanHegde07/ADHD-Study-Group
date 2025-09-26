@@ -69,7 +69,7 @@ if "agents" not in st.session_state:
         st.error(f"Failed to initialize AI agents: {e}")
         st.stop()
 
-st.title("ADHD Study Group")
+st.title("ADHD Study Group ")
 st.markdown(
     """
     Welcome! I'm your AI-powered companion designed to help you stay **motivated**
