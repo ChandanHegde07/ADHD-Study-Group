@@ -1,10 +1,10 @@
 import streamlit as st
-from typing import List, Dict 
+from typing import List, Dict
 from langchain_core.runnables import Runnable
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import BaseMessage 
+from langchain_core.messages import BaseMessage
 
 from agents.motivation_agent import get_motivation_chain
 from agents.teaching_agent import get_teaching_chain
@@ -12,40 +12,44 @@ from utils.message_converter import get_langchain_messages_from_st_history
 
 @st.cache_resource
 def initialize_agents(llm: ChatGoogleGenerativeAI):
-    """
-    Initializes and caches all individual agent chains.
-    This function uses Streamlit's cache_resource to ensure agents are
-    only initialized once per session, improving performance.
-    """
-    # st.write("Initializing AI agents... (This should only happen once)") 
-    
     agents = {}
     
-    # 1. Motivation Agent
     agents["Motivation"] = get_motivation_chain(llm)
 
-    # 2. Teaching Agent
     agents["Teaching"] = get_teaching_chain(llm)
-    
+
     return agents
 
+def clean_llm_response(response: str, agent_name: str) -> str:
+    prefixes_to_strip = [
+        f"{agent_name} Agent says:",
+        f"[{agent_name} Agent says]:",
+        f"{agent_name} Agent:",
+        f"[{agent_name} Agent]:",
+        "Motivation Agent says:",
+        "[Motivation Agent says]:",
+        "Teaching Agent says:",
+        "[Teaching Agent says]:",
+        "Agent says:",
+        "[Agent says]:"
+    ]
+    
+    cleaned_response = response
+    for prefix in prefixes_to_strip:
+        while cleaned_response.lower().startswith(prefix.lower().strip()):
+            cleaned_response = cleaned_response[len(prefix):].strip()
+            if cleaned_response.startswith("[") and "]:" in cleaned_response.split("]:")[0]:
+                 maybe_another_prefix = cleaned_response.split("]:")[0] + "]:"
+                 if any(known_p.lower().strip() == maybe_another_prefix.lower().strip() for known_p in prefixes_to_strip):
+                     cleaned_response = cleaned_response[len(maybe_another_prefix):].strip()
+                 else:
+                     break
+            else:
+                break
+    return cleaned_response
+
+
 def route_and_respond(user_input: str, chat_history: List[Dict[str, str]], agents: dict[str, Runnable], llm: ChatGoogleGenerativeAI, preferred_agent_name: str = "Auto") -> tuple[str, str]:
-    """
-    Routes the user's input to the most appropriate agent and gets a response,
-    considering the conversation history.
-
-    Args:
-        user_input: The raw string input from the user.
-        chat_history: The full list of previous messages in Streamlit's format.
-        agents: A dictionary of initialized LangChain Runnables (e.g., {"Motivation": motivation_chain}).
-        llm: The main LLM instance for fallback or specific routing queries (though agents use their own).
-        preferred_agent_name: The name of the agent the user explicitly selected (e.g., "Motivation", "Teaching", "Auto").
-
-    Returns:
-        A tuple containing:
-        - The agent's string response.
-        - The name of the agent that responded (e.g., "Motivation", "Teaching").
-    """
     final_chosen_agent_name = "Motivation" 
 
     langchain_chat_history = get_langchain_messages_from_st_history(chat_history)
@@ -62,6 +66,7 @@ def route_and_respond(user_input: str, chat_history: List[Dict[str, str]], agent
 
     try:
         response_content = chosen_agent_chain.invoke({"input": user_input, "chat_history": langchain_chat_history})
+        response_content = clean_llm_response(response_content, final_chosen_agent_name)
         return response_content, final_chosen_agent_name
     except Exception as e:
         st.error(f"Error invoking {final_chosen_agent_name} Agent: {e}")
@@ -96,7 +101,7 @@ if __name__ == "__main__":
 
             user_input_2 = "What was my last interaction with you?"
             simulated_app_messages.append({"role": "user", "content": user_input_2})
-            response_2, agent_name_2 = route_and_respond(user_input_2, simulated_app_messages, agents_for_test, test_llm, preferred_agent_name="Motivation") # Still explicitly Motivation
+            response_2, agent_name_2 = route_and_respond(user_input_2, simulated_app_messages, agents_for_test, test_llm, preferred_agent_name="Motivation")
             simulated_app_messages.append({"role": "assistant", "content": f"[{agent_name_2} Agent says]: {response_2}"})
             print(f"\nUser: {user_input_2} (Preferred: Motivation)")
             print(f"[{agent_name_2} Agent]: {response_2}")
