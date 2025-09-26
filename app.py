@@ -57,7 +57,7 @@ if "selected_agent" not in st.session_state:
 
 if "llm" not in st.session_state:
     try:
-        st.session_state.llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=GOOGLE_API_KEY)
+        st.session_state.llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-lite", google_api_key=GOOGLE_API_KEY)
     except Exception as e:
         st.error(f"Failed to initialize Gemini LLM. Check your API key and internet connection: {e}")
         st.stop()
