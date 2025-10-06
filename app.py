@@ -3,8 +3,11 @@ import os
 import json
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
+import nest_asyncio
 
 from agents.orchestrator import initialize_agents, route_and_respond
+
+nest_asyncio.apply()
 
 load_dotenv()
 
@@ -57,7 +60,7 @@ if "selected_agent" not in st.session_state:
 
 if "llm" not in st.session_state:
     try:
-        st.session_state.llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-lite", google_api_key=GOOGLE_API_KEY)
+        st.session_state.llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", google_api_key=GOOGLE_API_KEY)
     except Exception as e:
         st.error(f"Failed to initialize Gemini LLM. Check your API key and internet connection: {e}")
         st.stop()
@@ -69,7 +72,7 @@ if "agents" not in st.session_state:
         st.error(f"Failed to initialize AI agents: {e}")
         st.stop()
 
-st.title("ADHD Study Group ")
+st.title("ADHD Study Group")
 st.markdown(
     """
     Welcome! I'm your AI-powered companion designed to help you stay **motivated**
@@ -98,30 +101,31 @@ if prompt := st.chat_input("What's on your mind today?"):
     st.session_state.full_persistent_history.append({"role": "user", "content": prompt})
 
     with st.chat_message("assistant"):
-        try:
-            agent_response_content, agent_name = route_and_respond(
-                user_input=prompt,
-                chat_history=st.session_state.full_persistent_history,
-                agents=st.session_state.agents,
-                llm=st.session_state.llm,
-                preferred_agent_name=st.session_state.selected_agent
-            )
-            
-            st.session_state.last_agent_responded = agent_name
-            st.markdown(f"**[{agent_name} Agent says]:** {agent_response_content}")
-            
-            full_assistant_message = f"[{agent_name} Agent says]: {agent_response_content}"
-            st.session_state.display_messages.append({"role": "assistant", "content": full_assistant_message})
-            st.session_state.full_persistent_history.append({"role": "assistant", "content": full_assistant_message})
+        with st.spinner("Agent is thinking..."):
+            try:
+                agent_response_content, agent_name = route_and_respond(
+                    user_input=prompt,
+                    chat_history=st.session_state.full_persistent_history,
+                    agents=st.session_state.agents,
+                    llm=st.session_state.llm,
+                    preferred_agent_name=st.session_state.selected_agent
+                )
+                
+                st.session_state.last_agent_responded = agent_name
+                st.markdown(f"**[{agent_name} Agent says]:** {agent_response_content}")
+                
+                full_assistant_message = f"[{agent_name} Agent says]: {agent_response_content}"
+                st.session_state.display_messages.append({"role": "assistant", "content": full_assistant_message})
+                st.session_state.full_persistent_history.append({"role": "assistant", "content": full_assistant_message})
 
-            save_full_persistent_history(st.session_state.full_persistent_history)
+                save_full_persistent_history(st.session_state.full_persistent_history)
 
-        except Exception as e:
-            error_message = f"An error occurred while generating the response: {e}"
-            st.error(error_message)
-            st.session_state.display_messages.append({"role": "assistant", "content": error_message})
-            st.session_state.full_persistent_history.append({"role": "assistant", "content": error_message})
-            save_full_persistent_history(st.session_state.full_persistent_history)
+            except Exception as e:
+                error_message = f"An error occurred while generating the response: {e}"
+                st.error(error_message)
+                st.session_state.display_messages.append({"role": "assistant", "content": error_message})
+                st.session_state.full_persistent_history.append({"role": "assistant", "content": error_message})
+                save_full_persistent_history(st.session_state.full_persistent_history)
 
 if __name__ == "__main__":
     pass
