@@ -5,7 +5,6 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import BaseMessage
-# We'll use a library to check for fuzzy string matching for typos
 from difflib import get_close_matches
 
 from agents.motivation_agent import get_motivation_chain
@@ -71,28 +70,22 @@ def clean_llm_response(response: str, agent_name: str = "") -> str:
 def route_and_respond(user_input: str, chat_history: List[Dict[str, str]], agents: dict[str, Runnable], llm: ChatGoogleGenerativeAI, preferred_agent_name: str = "Auto") -> tuple[str, str]:
     final_chosen_agent_name = "Motivation" 
 
-    # Determine the last agent that responded from the history
-    last_agent_responded = "Motivation" # Default
+    last_agent_responded = "Motivation" 
     if chat_history:
         last_message = chat_history[-1]
         if last_message["role"] == "assistant" and "Teaching" in last_message["content"]:
             last_agent_responded = "Teaching"
 
-    # --- NEW, ROBUST HYBRID ROUTING LOGIC ---
     if preferred_agent_name and preferred_agent_name != "Auto" and preferred_agent_name in agents:
-        # Priority 1: User's explicit choice from dropdown
         final_chosen_agent_name = preferred_agent_name
     else:
         lower_input = user_input.lower()
         
-        # Priority 2: Stateful Follow-up check
         follow_up_keywords = ["another example", "more examples", "go on", "continue", "make it better", "different way"]
         if any(keyword in lower_input for keyword in follow_up_keywords) and last_agent_responded == "Teaching":
             final_chosen_agent_name = "Teaching"
         else:
-            # Priority 3: Typo-Resistant Keyword Check
             teaching_keywords = ["explain", "what is", "define", "teach", "simplify", "clarify", "how does"]
-            # Check if any word in the user input is a close match to a teaching keyword
             words_in_input = lower_input.split()
             found_teaching_keyword = False
             for word in words_in_input:
@@ -102,10 +95,8 @@ def route_and_respond(user_input: str, chat_history: List[Dict[str, str]], agent
                     break
             
             if not found_teaching_keyword:
-                # Priority 4: Fallback to the LLM router for truly ambiguous cases
                 with st.spinner("Finding the right agent..."):
                     router_chain = get_routing_chain(llm)
-                    # We only need the last few messages for the router's context
                     recent_history_for_router = chat_history[-6:]
                     cleaned_history_for_router = [
                         {"role": msg["role"], "content": clean_llm_response(msg["content"])} for msg in recent_history_for_router
@@ -122,7 +113,6 @@ def route_and_respond(user_input: str, chat_history: List[Dict[str, str]], agent
                 else:
                     final_chosen_agent_name = "Motivation"
     
-    # Sliding window for main agent latency fix
     HISTORY_WINDOW_SIZE = 20
     recent_history = chat_history[-HISTORY_WINDOW_SIZE:]
     cleaned_st_history = [{"role": msg["role"], "content": clean_llm_response(msg["content"])} for msg in recent_history]
@@ -138,7 +128,5 @@ def route_and_respond(user_input: str, chat_history: List[Dict[str, str]], agent
         st.error(f"Error invoking {final_chosen_agent_name} Agent: {e}")
         return "Oops! I had trouble getting a response from that agent. Please try again or rephrase.", "Error"
 
-# (The `if __name__ == "__main__":` block for testing remains the same)
 if __name__ == "__main__":
-    # Your testing code here...
     pass
