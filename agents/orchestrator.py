@@ -67,7 +67,7 @@ def clean_llm_response(response: str, agent_name: str = "") -> str:
             cleaned_response = cleaned_response[len(prefix):].strip()
     return cleaned_response
 
-def route_and_respond(user_input: str, chat_history: List[Dict[str, str]], agents: dict[str, Runnable], llm: ChatGoogleGenerativeAI, preferred_agent_name: str = "Auto") -> tuple[str, str]:
+def route_and_respond(user_input: str, chat_history: List[Dict[str, str]], agents: dict[str, Runnable], llm: ChatGoogleGenerativeAI, preferred_agent_name: str = "Auto", window_size: int = 20) -> tuple[str, str]:
     final_chosen_agent_name = "Motivation" 
 
     last_agent_responded = "Motivation" 
@@ -113,8 +113,8 @@ def route_and_respond(user_input: str, chat_history: List[Dict[str, str]], agent
                 else:
                     final_chosen_agent_name = "Motivation"
     
-    HISTORY_WINDOW_SIZE = 20
-    recent_history = chat_history[-HISTORY_WINDOW_SIZE:]
+    recent_history = chat_history[-window_size:]
+    
     cleaned_st_history = [{"role": msg["role"], "content": clean_llm_response(msg["content"])} for msg in recent_history]
     langchain_chat_history = get_langchain_messages_from_st_history(cleaned_st_history)
             

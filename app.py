@@ -20,7 +20,7 @@ st.set_page_config(
     page_title="ADHD Study Group: Your AI Companion",
     page_icon="",
     layout="centered",
-    initial_sidebar_state="auto"
+    initial_sidebar_state="collapsed" 
 )
 
 MEMORY_FILE_PATH = "chat_history.json"
@@ -72,7 +72,8 @@ if "agents" not in st.session_state:
         st.error(f"Failed to initialize AI agents: {e}")
         st.stop()
 
-st.title("ADHD Study Group")
+
+st.title("ADHD Study Group ")
 st.markdown(
     """
     Welcome! I'm your AI-powered companion designed to help you stay **motivated**
@@ -122,7 +123,7 @@ if prompt := st.chat_input("What's on your mind today?"):
 
             except Exception as e:
                 error_message = f"An error occurred while generating the response: {e}"
-                st.error(error_message)
+                st.error(error_message) 
                 st.session_state.display_messages.append({"role": "assistant", "content": error_message})
                 st.session_state.full_persistent_history.append({"role": "assistant", "content": error_message})
                 save_full_persistent_history(st.session_state.full_persistent_history)
