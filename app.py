@@ -16,30 +16,28 @@ nest_asyncio.apply()
 load_dotenv()
 setup_logger()
 
-
 CONFIG_FILE_PATH_ON_SERVER = "/etc/secrets/config.yaml"
 
 try:
     with open(CONFIG_FILE_PATH_ON_SERVER, 'r') as file:
         config = yaml.load(file, Loader=SafeLoader)
-    logging.info("Successfully loaded config.yaml from server path.")
+    logging.info(f"Successfully loaded config.yaml from server path: {CONFIG_FILE_PATH_ON_SERVER}")
 except FileNotFoundError:
-    logging.warning(f"{CONFIG_FILE_PATH_ON_SERVER} not found, falling back to local 'config.yaml'")
+    logging.warning(f"Server config path not found, falling back to local 'config.yaml'")
     try:
         with open('config.yaml', 'r') as file:
             config = yaml.load(file, Loader=SafeLoader)
         logging.info("Successfully loaded config.yaml from local path.")
     except FileNotFoundError:
-        st.error("`config.yaml` not found. Ensure it is in your project's root directory locally, or correctly mounted as a secret file on your server.")
+        st.error("`config.yaml` could not be found. Ensure it is in your project's root directory for local runs.")
         st.stop()
 except Exception as e:
     st.error(f"An error occurred while loading or parsing config.yaml: {e}")
     st.stop()
 
-
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if not GOOGLE_API_KEY:
-    st.error("GOOGLE_API_KEY not found. Please set it in your .env file locally or as an environment variable on your server.")
+    st.error("GOOGLE_API_KEY not found. Please set it as an environment variable.")
     st.stop()
 
 try:
@@ -145,19 +143,22 @@ def run_chat_app(username: str):
 
 st.title("ADHD Study Group ")
 
-try:
-    name, authentication_status, username = authenticator.login(
-        fields={'Form name': 'Login', 'Username': 'Username', 'Password': 'Password'}
-    )
-except Exception as e:
-    st.error(f"An error occurred during the login process: {e}")
-    st.stop()
+login_result = authenticator.login(
+    fields={'Form name': 'Login', 'Username': 'Username', 'Password': 'Password'}
+)
 
-if st.session_state["authentication_status"]:
-    logging.info(f"User '{username}' logged in successfully.")
-    run_chat_app(username)
-elif st.session_state["authentication_status"] is False:
-    st.error('Username/password is incorrect')
-    logging.warning(f"Failed login attempt for username: '{username}'")
-elif st.session_state["authentication_status"] is None:
-    st.info('Please enter your username and password.')
+if login_result:
+    name, authentication_status, username = login_result
+
+    if st.session_state["authentication_status"]:
+        logging.info(f"User '{username}' logged in successfully.")
+        run_chat_app(username) 
+    elif st.session_state["authentication_status"] is False:
+        st.error('Username/password is incorrect')
+        logging.warning(f"Failed login attempt for username: '{username}'")
+    elif st.session_state["authentication_status"] is None:
+        st.info('Please enter your username and password.')
+
+else:
+    if st.session_state.get("authentication_status") is None:
+        st.info('Please enter your username and password.')
