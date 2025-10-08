@@ -16,16 +16,26 @@ nest_asyncio.apply()
 load_dotenv()
 setup_logger()
 
+
+CONFIG_FILE_PATH_ON_SERVER = "/app/config.yaml"
+
 try:
-    with open('config.yaml', 'r') as file:
+    with open(CONFIG_FILE_PATH_ON_SERVER, 'r') as file:
         config = yaml.load(file, Loader=SafeLoader)
-    logging.info("Successfully loaded config.yaml.")
+    logging.info("Successfully loaded config.yaml from server path.")
 except FileNotFoundError:
-    st.error("`config.yaml` not found. Ensure it is in the same directory as app.py and correctly mounted as a secret file on your server.")
-    st.stop()
+    logging.warning(f"{CONFIG_FILE_PATH_ON_SERVER} not found, falling back to local 'config.yaml'")
+    try:
+        with open('config.yaml', 'r') as file:
+            config = yaml.load(file, Loader=SafeLoader)
+        logging.info("Successfully loaded config.yaml from local path.")
+    except FileNotFoundError:
+        st.error("`config.yaml` not found. Ensure it is in your project's root directory locally, or correctly mounted as a secret file on your server.")
+        st.stop()
 except Exception as e:
-    st.error(f"Error loading or parsing config.yaml: {e}")
+    st.error(f"An error occurred while loading or parsing config.yaml: {e}")
     st.stop()
+
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if not GOOGLE_API_KEY:
@@ -131,6 +141,7 @@ def run_chat_app(username: str):
         
         save_user_history(username, st.session_state.full_persistent_history)
         st.rerun()
+
 
 st.title("ADHD Study Group ")
 
