@@ -8,44 +8,34 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 import nest_asyncio
 import streamlit_authenticator as stauth
 from yaml.loader import SafeLoader
-
-# --- Import Utilities ---
 from agents.orchestrator import initialize_agents, route_and_respond
 from utils.logger_config import setup_logger
 from utils.rate_limiter import check_and_log_request
 
-# --- Initial Setup ---
+
 nest_asyncio.apply()
-load_dotenv()
+load_dotenv() 
 setup_logger()
 
-# --- FINAL, ROBUST CONFIG LOADING ---
-CONFIG_FILE_PATH_ON_SERVER = "/etc/secrets/config.yaml"
-
+config = None
 try:
-    with open(CONFIG_FILE_PATH_ON_SERVER, 'r') as file:
+    with open('/etc/secrets/config.yaml', 'r') as file:
         config = yaml.load(file, Loader=SafeLoader)
-    logging.info(f"Successfully loaded config.yaml from server path: {CONFIG_FILE_PATH_ON_SERVER}")
+    logging.info("Loaded config.yaml from server secret path.")
 except FileNotFoundError:
-    logging.warning(f"Server config path not found, falling back to local 'config.yaml'")
     try:
         with open('config.yaml', 'r') as file:
             config = yaml.load(file, Loader=SafeLoader)
-        logging.info("Successfully loaded config.yaml from local path.")
+        logging.info("Loaded config.yaml from local path.")
     except FileNotFoundError:
-        st.error("`config.yaml` could not be found. Ensure it is in your project's root directory for local runs.")
+        st.error("`config.yaml` not found. Please ensure it is in your project root locally or mounted as a secret file on your server.")
         st.stop()
-except Exception as e:
-    st.error(f"An error occurred while loading or parsing config.yaml: {e}")
-    st.stop()
 
-# Load the API key
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if not GOOGLE_API_KEY:
     st.error("GOOGLE_API_KEY not found. Please set it as an environment variable.")
     st.stop()
 
-# --- Authentication Configuration ---
 try:
     authenticator = stauth.Authenticate(
         config['credentials'],
@@ -57,11 +47,7 @@ except Exception as e:
     st.error(f"Error initializing authenticator from config.yaml: {e}")
     st.stop()
 
-# --- Main App Function (Contains all logic for a logged-in user) ---
 def run_chat_app(username: str):
-    # (The rest of your code from here down is already correct and well-structured)
-    # No changes are needed inside this function.
-    
     def load_user_history(user_id: str):
         filepath = f"{user_id}_chat_history.json"
         if os.path.exists(filepath):
@@ -150,29 +136,18 @@ def run_chat_app(username: str):
         save_user_history(username, st.session_state.full_persistent_history)
         st.rerun()
 
+st.title("ADHD Study Group ")
 
-# --- Main Entry Point of the App (The Login Gate) ---
-st.title("ADHD Study Group 🚀")
-
-# --- DEFINITIVE FIX IS HERE ---
-# Instead of trying to unpack the result immediately, we check the session state
-# that the authenticator widget sets by itself.
-
-# Render the login widget. It will automatically update st.session_state
 authenticator.login(fields={'Form name': 'Login', 'Username': 'Username', 'Password': 'Password'})
 
-# Now, we check the session state to decide what to do.
 if st.session_state.get("authentication_status"):
-    # If the status is True, the user is logged in.
     username = st.session_state.get("username")
     logging.info(f"User '{username}' logged in successfully.")
     run_chat_app(username)
 elif st.session_state.get("authentication_status") is False:
-    # If the status is False, the login attempt failed.
     st.error('Username/password is incorrect')
     username = st.session_state.get("username")
     if username:
         logging.warning(f"Failed login attempt for username: '{username}'")
 elif st.session_state.get("authentication_status") is None:
-    # If the status is None, the page is loading for the first time.
     st.info('Please enter your username and password.')
