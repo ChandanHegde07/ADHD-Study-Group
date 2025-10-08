@@ -13,19 +13,15 @@ from utils.logger_config import setup_logger
 from utils.rate_limiter import check_and_log_request
 
 nest_asyncio.apply()
-load_dotenv() 
+load_dotenv()
 setup_logger()
 
-
 try:
-    app_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(app_dir, 'config.yaml')
-    
-    with open(config_path) as file:
+    with open('config.yaml', 'r') as file:
         config = yaml.load(file, Loader=SafeLoader)
     logging.info("Successfully loaded config.yaml.")
 except FileNotFoundError:
-    st.error("`config.yaml` not found. Ensure it is in the same directory as app.py and is correctly mounted as a secret file on your server.")
+    st.error("`config.yaml` not found. Ensure it is in the same directory as app.py and correctly mounted as a secret file on your server.")
     st.stop()
 except Exception as e:
     st.error(f"Error loading or parsing config.yaml: {e}")
@@ -136,8 +132,7 @@ def run_chat_app(username: str):
         save_user_history(username, st.session_state.full_persistent_history)
         st.rerun()
 
-
-st.title("ADHD Study Group 🚀")
+st.title("ADHD Study Group ")
 
 try:
     name, authentication_status, username = authenticator.login(
