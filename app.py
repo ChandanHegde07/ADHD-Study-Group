@@ -13,52 +13,64 @@ from utils.logger_config import setup_logger
 from utils.rate_limiter import check_and_log_request
 
 nest_asyncio.apply()
-load_dotenv()
+load_dotenv() 
 setup_logger()
 
 try:
     with open('config.yaml') as file:
         config = yaml.load(file, Loader=SafeLoader)
+    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+    logging.info("Loaded configuration from local files.")
 
+except FileNotFoundError:
+    logging.info("config.yaml not found, attempting to load from server environment.")
+    if os.path.exists('config.yaml'):
+         with open('config.yaml') as file:
+            config = yaml.load(file, Loader=SafeLoader)
+    else:
+        st.error("Authentication config file not found on server. Please ensure the 'config.yaml' secret file is correctly mounted.")
+        st.stop()
+    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+
+if not GOOGLE_API_KEY:
+    st.error("GOOGLE_API_KEY not found. Please set it in your .env file locally or as an environment variable on your server.")
+    st.stop()
+
+try:
     authenticator = stauth.Authenticate(
         config['credentials'],
         config['cookie']['name'],
         config['cookie']['key'],
         config['cookie']['expiry_days']
     )
-except FileNotFoundError:
-    st.error("`config.yaml` not found. Please create this file for user authentication.")
-    st.stop()
 except Exception as e:
-    st.error(f"Error loading authentication config: {e}")
+    st.error(f"Error initializing authenticator: {e}")
     st.stop()
-
 
 def run_chat_app(username: str):
-    def load_user_history():
-        filepath = f"{username}_chat_history.json"
+    def load_user_history(user_id: str):
+        filepath = f"{user_id}_chat_history.json"
         if os.path.exists(filepath):
             with open(filepath, "r") as f:
                 return json.load(f)
         return []
 
-    def save_user_history(messages):
-        filepath = f"{username}_chat_history.json"
+    def save_user_history(user_id: str, messages: list):
+        filepath = f"{user_id}_chat_history.json"
         with open(filepath, "w") as f:
             json.dump(messages, f)
 
     if "full_persistent_history" not in st.session_state:
-        st.session_state.full_persistent_history = load_user_history()
+        st.session_state.full_persistent_history = load_user_history(username)
     
     if "display_messages" not in st.session_state:
         st.session_state.display_messages = []
         for msg in st.session_state.full_persistent_history:
             st.session_state.display_messages.append(msg)
 
-
     if "llm" not in st.session_state:
         try:
-            st.session_state.llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", google_api_key=os.getenv("GOOGLE_API_KEY"))
+            st.session_state.llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", google_api_key=GOOGLE_API_KEY)
             st.session_state.agents = initialize_agents(st.session_state.llm)
         except Exception as e:
             st.error("Could not initialize AI Agents. Please check API keys.")
@@ -72,7 +84,7 @@ def run_chat_app(username: str):
         if st.button("Clear My Chat History"):
             st.session_state.display_messages = []
             st.session_state.full_persistent_history = []
-            save_user_history([])
+            save_user_history(username, [])
             st.rerun()
 
     available_agents = ["Auto", "Motivation", "Teaching"] 
@@ -81,7 +93,6 @@ def run_chat_app(username: str):
 
     if not st.session_state.display_messages:
          with st.chat_message("assistant"):
-            # st.markdown("**Motivation Agent**")
             st.markdown("Hello! What's on your mind today? Ask me for encouragement or an explanation!")
 
     for message in st.session_state.display_messages:
@@ -122,11 +133,11 @@ def run_chat_app(username: str):
         st.session_state.display_messages.append({"role": "assistant", "content": full_assistant_message})
         st.session_state.full_persistent_history.append({"role": "assistant", "content": full_assistant_message})
         
-        save_user_history(st.session_state.full_persistent_history)
+        save_user_history(username, st.session_state.full_persistent_history)
         st.rerun()
 
 
-st.title("ADHD Study Group")
+st.title("ADHD Study Group 🚀")
 
 try:
     name, authentication_status, username = authenticator.login(
@@ -136,7 +147,6 @@ except Exception as e:
     st.error(f"An error occurred during the login process: {e}")
     st.stop()
 
-# Gatekeeper logic
 if st.session_state["authentication_status"]:
     logging.info(f"User '{username}' logged in successfully.")
     run_chat_app(username)
