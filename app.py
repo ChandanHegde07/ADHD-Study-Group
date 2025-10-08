@@ -8,6 +8,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 import nest_asyncio
 import streamlit_authenticator as stauth
 from yaml.loader import SafeLoader
+
 from agents.orchestrator import initialize_agents, route_and_respond
 from utils.logger_config import setup_logger
 from utils.rate_limiter import check_and_log_request
@@ -110,21 +111,29 @@ def run_chat_app(username: str):
         last_prompt = st.session_state.display_messages[-1]["content"]
         
         with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                agent_response_content, agent_name = route_and_respond(
+            with st.spinner("Finding the right agent and preparing response..."):
+                response_stream, agent_name = route_and_respond(
                     user_input=last_prompt,
                     chat_history=st.session_state.full_persistent_history,
                     agents=st.session_state.agents,
                     llm=st.session_state.llm,
-                    preferred_agent_name=selected_agent
+                    preferred_agent_name=selected_agent,
+                    stream=True 
                 )
+            
+            st.markdown(f"**[{agent_name} Agent says]:**")
+            
+            full_response_content = st.write_stream(response_stream)
         
-        full_assistant_message = f"[{agent_name} Agent says]: {agent_response_content}"
+        full_assistant_message = f"[{agent_name} Agent says]: {full_response_content}"
+        
         st.session_state.display_messages.append({"role": "assistant", "content": full_assistant_message})
         st.session_state.full_persistent_history.append({"role": "assistant", "content": full_assistant_message})
         
         save_user_history(username, st.session_state.full_persistent_history)
+        
         st.rerun()
+
 
 st.title("ADHD Study Group ")
 
