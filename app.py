@@ -12,28 +12,31 @@ from agents.orchestrator import initialize_agents, route_and_respond
 from utils.logger_config import setup_logger
 from utils.rate_limiter import check_and_log_request
 
-
 nest_asyncio.apply()
-load_dotenv() 
+load_dotenv()
 setup_logger()
 
+CONFIG_FILE_PATH_ON_SERVER = "/etc/secrets/config.yaml"
 config = None
 try:
-    with open('/etc/secrets/config.yaml', 'r') as file:
+    with open(CONFIG_FILE_PATH_ON_SERVER, 'r') as file:
         config = yaml.load(file, Loader=SafeLoader)
-    logging.info("Loaded config.yaml from server secret path.")
+    logging.info(f"Loaded config.yaml from server path.")
 except FileNotFoundError:
     try:
         with open('config.yaml', 'r') as file:
             config = yaml.load(file, Loader=SafeLoader)
         logging.info("Loaded config.yaml from local path.")
     except FileNotFoundError:
-        st.error("`config.yaml` not found. Please ensure it is in your project root locally or mounted as a secret file on your server.")
+        st.error("`config.yaml` not found.")
         st.stop()
+except Exception as e:
+    st.error(f"Error loading or parsing config.yaml: {e}")
+    st.stop()
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if not GOOGLE_API_KEY:
-    st.error("GOOGLE_API_KEY not found. Please set it as an environment variable.")
+    st.error("GOOGLE_API_KEY not found.")
     st.stop()
 
 try:
@@ -44,40 +47,36 @@ try:
         config['cookie']['expiry_days']
     )
 except Exception as e:
-    st.error(f"Error initializing authenticator from config.yaml: {e}")
+    st.error(f"Error initializing authenticator: {e}")
     st.stop()
 
 def run_chat_app(username: str):
     def load_user_history(user_id: str):
         filepath = f"{user_id}_chat_history.json"
         if os.path.exists(filepath):
-            with open(filepath, "r") as f:
-                return json.load(f)
+            with open(filepath, "r") as f: return json.load(f)
         return []
 
     def save_user_history(user_id: str, messages: list):
         filepath = f"{user_id}_chat_history.json"
-        with open(filepath, "w") as f:
-            json.dump(messages, f)
+        with open(filepath, "w") as f: json.dump(messages, f)
 
     if "full_persistent_history" not in st.session_state:
         st.session_state.full_persistent_history = load_user_history(username)
     
     if "display_messages" not in st.session_state:
-        st.session_state.display_messages = []
-        for msg in st.session_state.full_persistent_history:
-            st.session_state.display_messages.append(msg)
+        st.session_state.display_messages = list(st.session_state.full_persistent_history)
 
     if "llm" not in st.session_state:
         try:
             st.session_state.llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", google_api_key=GOOGLE_API_KEY)
             st.session_state.agents = initialize_agents(st.session_state.llm)
         except Exception as e:
-            st.error("Could not initialize AI Agents. Please check API keys.")
-            logging.error(f"Failed to initialize LLM or Agents for user '{username}': {e}")
+            st.error("Could not initialize AI Agents.")
+            logging.error(f"LLM/Agent init error for user '{username}': {e}")
             st.stop()
 
-    st.markdown(f"Welcome, **{st.session_state['name']}**! I'm your AI-powered companion. Choose an agent to get started!")
+    st.markdown(f"Welcome, **{st.session_state['name']}**! I'm your AI companion.")
 
     with st.expander("Controls"):
         authenticator.logout('Logout', 'main')
@@ -87,31 +86,22 @@ def run_chat_app(username: str):
             save_user_history(username, [])
             st.rerun()
 
-    available_agents = ["Auto", "Motivation", "Teaching"] 
-    selected_agent = st.selectbox("Choose an Agent to talk to:", options=available_agents)
+    selected_agent = st.selectbox("Choose an Agent:", options=["Auto", "Motivation", "Teaching"])
     st.divider()
 
     if not st.session_state.display_messages:
          with st.chat_message("assistant"):
-            st.markdown("Hello! What's on your mind today? Ask me for encouragement or an explanation!")
+            st.markdown("Hello! How can I help you today?")
 
     for message in st.session_state.display_messages:
         with st.chat_message(message["role"]):
-            content = message["content"]
-            if message["role"] == "assistant":
-                agent_name = "Motivation"
-                if content.startswith("[Teaching"): agent_name = "Teaching"
-                elif content.startswith("[Error"): agent_name = "Error"
-                content = content.split("Agent says]:", 1)[-1].strip()
-                st.markdown(f"**{agent_name} Agent**")
-            st.markdown(content)
+            st.markdown(message["content"])
 
-    if prompt := st.chat_input("What's on your mind today?"):
+    if prompt := st.chat_input("What's on your mind?"):
         if not check_and_log_request(username):
-            st.warning("You have reached the request limit. Please try again in a minute.")
-            logging.warning(f"Rate limit exceeded for user '{username}'.")
+            st.warning("Rate limit reached. Please wait a minute.")
         else:
-            logging.info(f"User '{username}' sent prompt: '{prompt}'")
+            logging.info(f"User '{username}' prompt: '{prompt}'")
             st.session_state.display_messages.append({"role": "user", "content": prompt})
             st.session_state.full_persistent_history.append({"role": "user", "content": prompt})
             st.rerun()
@@ -120,7 +110,7 @@ def run_chat_app(username: str):
         last_prompt = st.session_state.display_messages[-1]["content"]
         
         with st.chat_message("assistant"):
-            with st.spinner("Agent is thinking..."):
+            with st.spinner("Thinking..."):
                 agent_response_content, agent_name = route_and_respond(
                     user_input=last_prompt,
                     chat_history=st.session_state.full_persistent_history,
@@ -142,12 +132,11 @@ authenticator.login(fields={'Form name': 'Login', 'Username': 'Username', 'Passw
 
 if st.session_state.get("authentication_status"):
     username = st.session_state.get("username")
-    logging.info(f"User '{username}' logged in successfully.")
+    logging.info(f"User '{username}' logged in.")
     run_chat_app(username)
 elif st.session_state.get("authentication_status") is False:
-    st.error('Username/password is incorrect')
+    st.error('Username/password is incorrect.')
     username = st.session_state.get("username")
-    if username:
-        logging.warning(f"Failed login attempt for username: '{username}'")
+    if username: logging.warning(f"Failed login for user: '{username}'")
 elif st.session_state.get("authentication_status") is None:
     st.info('Please enter your username and password.')
