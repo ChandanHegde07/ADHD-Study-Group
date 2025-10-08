@@ -16,22 +16,22 @@ nest_asyncio.apply()
 load_dotenv() 
 setup_logger()
 
+
 try:
-    with open('config.yaml') as file:
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(app_dir, 'config.yaml')
+    
+    with open(config_path) as file:
         config = yaml.load(file, Loader=SafeLoader)
-    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-    logging.info("Loaded configuration from local files.")
-
+    logging.info("Successfully loaded config.yaml.")
 except FileNotFoundError:
-    logging.info("config.yaml not found, attempting to load from server environment.")
-    if os.path.exists('config.yaml'):
-         with open('config.yaml') as file:
-            config = yaml.load(file, Loader=SafeLoader)
-    else:
-        st.error("Authentication config file not found on server. Please ensure the 'config.yaml' secret file is correctly mounted.")
-        st.stop()
-    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+    st.error("`config.yaml` not found. Ensure it is in the same directory as app.py and is correctly mounted as a secret file on your server.")
+    st.stop()
+except Exception as e:
+    st.error(f"Error loading or parsing config.yaml: {e}")
+    st.stop()
 
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if not GOOGLE_API_KEY:
     st.error("GOOGLE_API_KEY not found. Please set it in your .env file locally or as an environment variable on your server.")
     st.stop()
@@ -44,7 +44,7 @@ try:
         config['cookie']['expiry_days']
     )
 except Exception as e:
-    st.error(f"Error initializing authenticator: {e}")
+    st.error(f"Error initializing authenticator from config.yaml: {e}")
     st.stop()
 
 def run_chat_app(username: str):
