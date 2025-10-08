@@ -8,7 +8,6 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 import nest_asyncio
 import streamlit_authenticator as stauth
 from yaml.loader import SafeLoader
-
 from agents.orchestrator import initialize_agents, route_and_respond
 from utils.logger_config import setup_logger
 from utils.rate_limiter import check_and_log_request
@@ -140,9 +139,11 @@ st.title("ADHD Study Group ")
 authenticator.login(fields={'Form name': 'Login', 'Username': 'Username', 'Password': 'Password'})
 
 if st.session_state.get("authentication_status"):
-    username = st.session_state.get("username")
-    logging.info(f"User '{username}' logged in.")
-    run_chat_app(username)
+    with st.spinner("Loading your personalized study session..."):
+        username = st.session_state.get("username")
+        logging.info(f"User '{username}' logged in.")
+        run_chat_app(username)
+
 elif st.session_state.get("authentication_status") is False:
     st.error('Username/password is incorrect.')
     username = st.session_state.get("username")
