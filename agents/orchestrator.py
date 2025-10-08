@@ -20,9 +20,6 @@ def initialize_agents(llm: ChatGoogleGenerativeAI):
 
 @st.cache_resource
 def get_routing_chain(_llm: ChatGoogleGenerativeAI):
-    """
-    Creates a specialized, few-shot chain to classify the user's intent with more nuance.
-    """
     router_prompt_template = """
 Your job is to act as a router. Based on the latest user prompt and the preceding conversation history, you must determine if the primary intent is 'teaching' or 'motivation'.
 The 'teaching' intent takes priority if the user is asking about an academic concept, even if they express frustration. A follow-up like "another example" after a teaching response is a 'teaching' intent.

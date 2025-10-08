@@ -4,20 +4,6 @@ from langchain_core.runnables import Runnable
 from langchain_core.messages import BaseMessage
 
 def get_teaching_chain(llm: Runnable) -> Runnable:
-    """
-    Creates and returns a LangChain Runnable for the Teaching Agent.
-
-    This agent's primary role is to explain concepts clearly, patiently,
-    and in simple terms, suitable for K-12 students with ADHD. It should
-    break down complex information and use analogies.
-
-    Args:
-        llm: An initialized LLM instance (e.g., ChatGoogleGenerativeAI).
-
-    Returns:
-        A LangChain Runnable that takes user input and chat history, and
-        returns an explanatory string response.
-    """
     teaching_persona = """
     You are the "Teaching Agent" for an ADHD Study Group.
     Your core purpose is to explain academic concepts and answer questions in a clear, patient,

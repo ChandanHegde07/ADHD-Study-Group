@@ -4,17 +4,6 @@ from langchain_core.runnables import Runnable
 from langchain_core.messages import BaseMessage 
 
 def get_motivation_chain(llm: Runnable) -> Runnable:
-    """
-    Creates and returns a LangChain Runnable for the Motivation Agent.
-    It now includes a MessagesPlaceholder to maintain conversation history.
-
-    Args:
-        llm: An initialized LLM instance (e.g., ChatGoogleGenerativeAI).
-
-    Returns:
-        A LangChain Runnable that takes user input and chat history, and
-        returns a motivational string response.
-    """
     motivation_persona = """
     You are the "Motivation Agent" for an ADHD Study Group.
     Your core purpose is to be a source of boundless empathy, encouragement, and positivity.

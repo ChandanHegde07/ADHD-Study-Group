@@ -3,3 +3,6 @@ langchain
 langchain-google-genai
 python-dotenv
 nest-asyncio
+streamlit-authenticator
+PyYAML
+bcrypt

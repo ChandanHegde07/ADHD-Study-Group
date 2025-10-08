@@ -37,3 +37,8 @@ env/
 build/
 dist/
 *.egg-info/
+
+*.json
+*.log
+config.yaml
+generate_keys.py
