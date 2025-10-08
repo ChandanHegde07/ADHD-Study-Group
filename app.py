@@ -84,7 +84,7 @@ def run_chat_app(username: str):
     st.markdown(f"Welcome, **{st.session_state['name']}**! I'm your AI-powered companion. Choose an agent to get started!")
 
     with st.expander("Controls"):
-        authenticator.logout('Logout', 'main')
+        authenticator.logout('Logout', 'main') 
         if st.button("Clear My Chat History"):
             st.session_state.display_messages = []
             st.session_state.full_persistent_history = []
@@ -120,6 +120,7 @@ def run_chat_app(username: str):
             st.session_state.full_persistent_history.append({"role": "user", "content": prompt})
             st.rerun()
 
+    # --- Generate Assistant Response ---
     if st.session_state.display_messages and st.session_state.display_messages[-1]["role"] == "user":
         last_prompt = st.session_state.display_messages[-1]["content"]
         
@@ -140,25 +141,21 @@ def run_chat_app(username: str):
         save_user_history(username, st.session_state.full_persistent_history)
         st.rerun()
 
-
 st.title("ADHD Study Group ")
 
-login_result = authenticator.login(
-    fields={'Form name': 'Login', 'Username': 'Username', 'Password': 'Password'}
-)
+try:
+    name, authentication_status, username = authenticator.login(
+        fields={'Form name': 'Login', 'Username': 'Username', 'Password': 'Password'}
+    )
+except Exception as e:
+    st.error(f"An error occurred during the login process: {e}")
+    st.stop()
 
-if login_result:
-    name, authentication_status, username = login_result
-
-    if st.session_state["authentication_status"]:
-        logging.info(f"User '{username}' logged in successfully.")
-        run_chat_app(username) 
-    elif st.session_state["authentication_status"] is False:
-        st.error('Username/password is incorrect')
-        logging.warning(f"Failed login attempt for username: '{username}'")
-    elif st.session_state["authentication_status"] is None:
-        st.info('Please enter your username and password.')
-
-else:
-    if st.session_state.get("authentication_status") is None:
-        st.info('Please enter your username and password.')
+if st.session_state["authentication_status"]:
+    logging.info(f"User '{username}' logged in successfully.")
+    run_chat_app(username)
+elif st.session_state["authentication_status"] is False:
+    st.error('Username/password is incorrect')
+    logging.warning(f"Failed login attempt for username: '{username}'")
+elif st.session_state["authentication_status"] is None:
+    st.info('Please enter your username and password.')
