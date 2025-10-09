@@ -16,6 +16,47 @@ nest_asyncio.apply()
 load_dotenv()
 setup_logger()
 
+st.set_page_config(
+    page_title="ADHD Study Group",
+    page_icon="",
+    layout="centered",
+    initial_sidebar_state="collapsed"
+)
+
+st.markdown("""
+<style>
+    /* General body styling for a cleaner font */
+    html, body, [class*="st-"] {
+        font-family: 'Inter', sans-serif;
+    }
+
+    /* Main chat container styling */
+    [data-testid="stChatMessage"] {
+        background-color: #282C34; /* Matches secondaryBackgroundColor */
+        border-radius: 20px;
+        box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
+        border: none;
+    }
+
+    /* Round the chat input area */
+    [data-testid="stChatInput"] {
+        border-radius: 15px;
+    }
+    
+    /* Style the main containers/cards */
+    .st-emotion-cache-1r4qj8v { /* Targets st.container(border=True) */
+        border-radius: 15px;
+        border: 2px solid #282C34;
+    }
+
+    /* Style the expander header */
+    .st-emotion-cache-1h9usn1 {
+        font-weight: 600;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+
 CONFIG_FILE_PATH_ON_SERVER = "/etc/secrets/config.yaml"
 config = None
 try:
@@ -34,13 +75,11 @@ except Exception as e:
     st.error(f"Error loading or parsing config.yaml: {e}")
     st.stop()
 
-# Load the API key
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if not GOOGLE_API_KEY:
     st.error("GOOGLE_API_KEY not found.")
     st.stop()
 
-# --- Authentication Configuration ---
 try:
     authenticator = stauth.Authenticate(
         config['credentials'],
@@ -65,10 +104,8 @@ def run_chat_app(username: str):
 
     if "full_persistent_history" not in st.session_state:
         st.session_state.full_persistent_history = load_user_history(username)
-    
     if "display_messages" not in st.session_state:
         st.session_state.display_messages = list(st.session_state.full_persistent_history)
-
     if "llm" not in st.session_state:
         try:
             st.session_state.llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", google_api_key=GOOGLE_API_KEY)
@@ -78,26 +115,55 @@ def run_chat_app(username: str):
             logging.error(f"LLM/Agent init error for user '{username}': {e}")
             st.stop()
 
-    st.markdown(f"Welcome, **{st.session_state['name']}**! I'm your AI companion.")
+    st.markdown(f"Welcome, **{st.session_state['name']}**! I'm your AI companion for studying.")
 
-    with st.expander("Controls"):
-        authenticator.logout('Logout', 'main')
-        if st.button("Clear My Chat History"):
-            st.session_state.display_messages = []
-            st.session_state.full_persistent_history = []
-            save_user_history(username, [])
-            st.rerun()
-
-    selected_agent = st.selectbox("Choose an Agent:", options=["Auto", "Motivation", "Teaching"])
+    with st.container(border=True):
+        st.markdown("##### Agent & Session Controls")
+        col1, col2 = st.columns([3, 1]) 
+        with col1:
+            available_agents = ["Auto", "Motivation", "Teaching"]
+            selected_agent = st.selectbox(
+                "Choose an Agent:", 
+                options=available_agents,
+                label_visibility="collapsed" 
+            )
+        
+        with col2:
+            with st.expander("Options"):
+                authenticator.logout('Logout', 'main')
+                if st.button("Clear History"):
+                    st.session_state.display_messages = []
+                    st.session_state.full_persistent_history = []
+                    save_user_history(username, [])
+                    st.rerun()
+    
     st.divider()
 
+    AVATARS = {"user": "", "Motivation": "", "Teaching": "", "Error": ""}
+
     if not st.session_state.display_messages:
-         with st.chat_message("assistant"):
-            st.markdown("Hello! How can I help you today?")
+         with st.chat_message("assistant", avatar=AVATARS["Motivation"]):
+            st.markdown("**Motivation Agent**")
+            st.markdown("Hello! What's on your mind today?")
 
     for message in st.session_state.display_messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+        role = message["role"]
+        content = message["content"]
+        
+        if role == "user":
+            with st.chat_message("user", avatar=AVATARS["user"]):
+                st.markdown(content)
+        else:
+            agent_name = "Motivation" 
+            if content.startswith("[Teaching"): agent_name = "Teaching"
+            elif content.startswith("[Error"): agent_name = "Error"
+            
+            cleaned_content = content.split("Agent says]:", 1)[-1].strip() if "Agent says]:" in content else content
+            
+            avatar = AVATARS.get(agent_name, "🤖")
+            with st.chat_message("assistant", avatar=avatar):
+                st.markdown(f"**{agent_name} Agent**")
+                st.markdown(cleaned_content)
 
     if prompt := st.chat_input("What's on your mind?"):
         if not check_and_log_request(username):
@@ -111,32 +177,31 @@ def run_chat_app(username: str):
     if st.session_state.display_messages and st.session_state.display_messages[-1]["role"] == "user":
         last_prompt = st.session_state.display_messages[-1]["content"]
         
-        with st.chat_message("assistant"):
-            with st.spinner("Finding the right agent and preparing response..."):
-                response_stream, agent_name = route_and_respond(
-                    user_input=last_prompt,
-                    chat_history=st.session_state.full_persistent_history,
-                    agents=st.session_state.agents,
-                    llm=st.session_state.llm,
-                    preferred_agent_name=selected_agent,
-                    stream=True 
-                )
-            
-            st.markdown(f"**[{agent_name} Agent says]:**")
-            
-            full_response_content = st.write_stream(response_stream)
+        with st.chat_message("assistant", avatar=""):
+            st.markdown(f"**Thinking...**")
+            placeholder = st.empty()
+        
+        response_stream, agent_name = route_and_respond(
+            user_input=last_prompt,
+            chat_history=st.session_state.full_persistent_history,
+            agents=st.session_state.agents,
+            llm=st.session_state.llm,
+            preferred_agent_name=selected_agent,
+            stream=True 
+        )
+        
+        with placeholder.container():
+             st.markdown(f"**{agent_name} Agent**")
+             full_response_content = st.write_stream(response_stream)
         
         full_assistant_message = f"[{agent_name} Agent says]: {full_response_content}"
-        
         st.session_state.display_messages.append({"role": "assistant", "content": full_assistant_message})
         st.session_state.full_persistent_history.append({"role": "assistant", "content": full_assistant_message})
         
         save_user_history(username, st.session_state.full_persistent_history)
-        
         st.rerun()
 
-
-st.title("ADHD Study Group ")
+st.title("ADHD Study Group 🚀")
 
 authenticator.login(fields={'Form name': 'Login', 'Username': 'Username', 'Password': 'Password'})
 
