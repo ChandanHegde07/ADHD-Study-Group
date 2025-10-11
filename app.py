@@ -55,17 +55,15 @@ except Exception as e:
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_db_connection():
-    """Establishes a connection to the PostgreSQL database."""
     try:
         conn = psycopg2.connect(DATABASE_URL)
         return conn
     except Exception as e:
         logging.error(f"Database connection failed: {e}")
-        st.toast("Error: Could not connect to the database.", icon="🔥")
+        st.toast("Error: Could not connect to the database.", icon="")
         return None
 
 def setup_database():
-    """Ensures the chat_history table exists. Runs only once."""
     conn = get_db_connection()
     if conn:
         with conn.cursor() as cur:
@@ -83,24 +81,18 @@ def setup_database():
 
 def run_chat_app(username: str):
     if authenticator.logout('Logout', 'main'):
-        st.session_state.pop("full_persistent_history", None)
-        st.session_state.pop("display_messages", None)
-        st.session_state.pop("llm", None)
-        st.session_state.pop("agents", None)
-        st.toast("You have been successfully logged out.", icon="👋")
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.toast("You have been successfully logged out.", icon="")
         st.rerun()
 
     def load_user_history_from_db(user_id: str):
-        """Loads a user's entire chat history from the database."""
         history = []
         conn = get_db_connection()
         if conn:
             try:
                 with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT role, content FROM chat_history WHERE username = %s ORDER BY timestamp ASC",
-                        (user_id,)
-                    )
+                    cur.execute("SELECT role, content FROM chat_history WHERE username = %s ORDER BY timestamp ASC", (user_id,))
                     for row in cur.fetchall():
                         history.append({"role": row[0], "content": row[1]})
             finally:
@@ -108,24 +100,17 @@ def run_chat_app(username: str):
         return history
 
     def save_message_to_db(user_id: str, role: str, content: str):
-        """Saves a single new message to the database."""
         conn = get_db_connection()
         if conn:
             try:
                 with conn.cursor() as cur:
-                    cur.execute(
-                        "INSERT INTO chat_history (username, role, content) VALUES (%s, %s, %s)",
-                        (user_id, role, content)
-                    )
+                    cur.execute("INSERT INTO chat_history (username, role, content) VALUES (%s, %s, %s)", (user_id, role, content))
                     conn.commit()
             finally:
                 conn.close()
 
-    if "full_persistent_history" not in st.session_state:
-        st.session_state.full_persistent_history = load_user_history_from_db(username)
-    
-    if "display_messages" not in st.session_state:
-        st.session_state.display_messages = list(st.session_state.full_persistent_history)
+    if "messages" not in st.session_state:
+        st.session_state.messages = load_user_history_from_db(username)
 
     if "llm" not in st.session_state:
         try:
@@ -146,25 +131,19 @@ def run_chat_app(username: str):
                     with conn.cursor() as cur:
                         cur.execute("DELETE FROM chat_history WHERE username = %s", (username,))
                         conn.commit()
-                    st.toast("Chat history cleared from database!", icon="✅")
+                    st.toast("Chat history cleared!", icon="")
                     logging.info(f"Chat history cleared for user '{username}'.")
                 except Exception as e:
                     st.error("Failed to clear history from database.")
                 finally:
                     conn.close()
-            
-            st.session_state.display_messages = []
-            st.session_state.full_persistent_history = []
+            st.session_state.messages = []
             st.rerun()
 
     selected_agent = st.selectbox("Choose an Agent:", options=["Auto", "Motivation", "Teaching"])
     st.divider()
 
-    if not st.session_state.display_messages:
-         with st.chat_message("assistant"):
-            st.markdown("Hello! How can I help you today?")
-
-    for message in st.session_state.display_messages:
+    for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
@@ -173,35 +152,31 @@ def run_chat_app(username: str):
             st.warning("Rate limit reached. Please wait a minute.")
         else:
             logging.info(f"User '{username}' prompt: '{prompt}'")
-            st.session_state.display_messages.append({"role": "user", "content": prompt})
-            st.session_state.full_persistent_history.append({"role": "user", "content": prompt})
-            save_message_to_db(username, "user", prompt)
-            st.rerun()
-
-    if st.session_state.display_messages and st.session_state.display_messages[-1]["role"] == "user":
-        last_prompt = st.session_state.display_messages[-1]["content"]
-        
-        with st.chat_message("assistant"):
-            with st.spinner("Finding the right agent and preparing response..."):
-                response_stream, agent_name = route_and_respond(
-                    user_input=last_prompt,
-                    chat_history=st.session_state.full_persistent_history,
-                    agents=st.session_state.agents,
-                    llm=st.session_state.llm,
-                    preferred_agent_name=selected_agent,
-                    stream=True 
-                )
             
-            st.markdown(f"**[{agent_name} Agent says]:**")
-            full_response_content = st.write_stream(response_stream)
-        
-        full_assistant_message = f"[{agent_name} Agent says]: {full_response_content}"
-        
-        st.session_state.display_messages.append({"role": "assistant", "content": full_assistant_message})
-        st.session_state.full_persistent_history.append({"role": "assistant", "content": full_assistant_message})
-        
-        save_message_to_db(username, "assistant", full_assistant_message)
-        st.rerun()
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            save_message_to_db(username, "user", prompt)
+            
+            with st.chat_message("user"):
+                st.markdown(prompt)
+            
+            with st.chat_message("assistant"):
+                with st.spinner("Agent is thinking..."):
+                    response_stream, agent_name = route_and_respond(
+                        user_input=prompt,
+                        chat_history=st.session_state.messages, 
+                        agents=st.session_state.agents,
+                        llm=st.session_state.llm,
+                        preferred_agent_name=selected_agent,
+                        stream=True 
+                    )
+                
+                st.markdown(f"**[{agent_name} Agent says]:**")
+                full_response_content = st.write_stream(response_stream)
+            
+            full_assistant_message = f"[{agent_name} Agent says]: {full_response_content}"
+            st.session_state.messages.append({"role": "assistant", "content": full_assistant_message})
+            save_message_to_db(username, "assistant", full_assistant_message)
+            
 
 st.title("ADHD Study Group ")
 
