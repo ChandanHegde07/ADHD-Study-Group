@@ -82,6 +82,14 @@ def setup_database():
         conn.close()
 
 def run_chat_app(username: str):
+    if authenticator.logout('Logout', 'main'):
+        st.session_state.pop("full_persistent_history", None)
+        st.session_state.pop("display_messages", None)
+        st.session_state.pop("llm", None)
+        st.session_state.pop("agents", None)
+        st.toast("You have been successfully logged out.", icon="👋")
+        st.rerun()
+
     def load_user_history_from_db(user_id: str):
         """Loads a user's entire chat history from the database."""
         history = []
@@ -131,7 +139,6 @@ def run_chat_app(username: str):
     st.markdown(f"Welcome, **{st.session_state['name']}**! I'm your AI companion.")
 
     with st.expander("Controls"):
-        authenticator.logout('Logout', 'main')
         if st.button("Clear My Chat History"):
             conn = get_db_connection()
             if conn:
@@ -143,7 +150,6 @@ def run_chat_app(username: str):
                     logging.info(f"Chat history cleared for user '{username}'.")
                 except Exception as e:
                     st.error("Failed to clear history from database.")
-                    logging.error(f"Failed to clear history for '{username}': {e}")
                 finally:
                     conn.close()
             
