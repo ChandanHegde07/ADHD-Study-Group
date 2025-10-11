@@ -87,27 +87,31 @@ def run_chat_app(username: str):
         history = []
         conn = get_db_connection()
         if conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT role, content FROM chat_history WHERE username = %s ORDER BY timestamp ASC",
-                    (user_id,)
-                )
-                for row in cur.fetchall():
-                    history.append({"role": row[0], "content": row[1]})
-            conn.close()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT role, content FROM chat_history WHERE username = %s ORDER BY timestamp ASC",
+                        (user_id,)
+                    )
+                    for row in cur.fetchall():
+                        history.append({"role": row[0], "content": row[1]})
+            finally:
+                conn.close()
         return history
 
     def save_message_to_db(user_id: str, role: str, content: str):
         """Saves a single new message to the database."""
         conn = get_db_connection()
         if conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "INSERT INTO chat_history (username, role, content) VALUES (%s, %s, %s)",
-                    (user_id, role, content)
-                )
-                conn.commit()
-            conn.close()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO chat_history (username, role, content) VALUES (%s, %s, %s)",
+                        (user_id, role, content)
+                    )
+                    conn.commit()
+            finally:
+                conn.close()
 
     if "full_persistent_history" not in st.session_state:
         st.session_state.full_persistent_history = load_user_history_from_db(username)
@@ -131,10 +135,18 @@ def run_chat_app(username: str):
         if st.button("Clear My Chat History"):
             conn = get_db_connection()
             if conn:
-                with conn.cursor() as cur:
-                    cur.execute("DELETE FROM chat_history WHERE username = %s", (username,))
-                    conn.commit()
-                conn.close()
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute("DELETE FROM chat_history WHERE username = %s", (username,))
+                        conn.commit()
+                    st.toast("Chat history cleared from database!", icon="✅")
+                    logging.info(f"Chat history cleared for user '{username}'.")
+                except Exception as e:
+                    st.error("Failed to clear history from database.")
+                    logging.error(f"Failed to clear history for '{username}': {e}")
+                finally:
+                    conn.close()
+            
             st.session_state.display_messages = []
             st.session_state.full_persistent_history = []
             st.rerun()
@@ -157,7 +169,7 @@ def run_chat_app(username: str):
             logging.info(f"User '{username}' prompt: '{prompt}'")
             st.session_state.display_messages.append({"role": "user", "content": prompt})
             st.session_state.full_persistent_history.append({"role": "user", "content": prompt})
-            save_message_to_db(username, "user", prompt) 
+            save_message_to_db(username, "user", prompt)
             st.rerun()
 
     if st.session_state.display_messages and st.session_state.display_messages[-1]["role"] == "user":
@@ -182,7 +194,7 @@ def run_chat_app(username: str):
         st.session_state.display_messages.append({"role": "assistant", "content": full_assistant_message})
         st.session_state.full_persistent_history.append({"role": "assistant", "content": full_assistant_message})
         
-        save_message_to_db(username, "assistant", full_assistant_message) # <-- Save assistant message to DB
+        save_message_to_db(username, "assistant", full_assistant_message)
         st.rerun()
 
 st.title("ADHD Study Group ")
