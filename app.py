@@ -60,24 +60,28 @@ def get_db_connection():
         return conn
     except Exception as e:
         logging.error(f"Database connection failed: {e}")
-        st.toast("Error: Could not connect to the database.", icon="")
+        st.toast("Error: Could not connect to the database.", icon="🔥")
         return None
 
 def setup_database():
     conn = get_db_connection()
     if conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS chat_history (
-                    id SERIAL PRIMARY KEY,
-                    username VARCHAR(255) NOT NULL,
-                    role VARCHAR(50) NOT NULL,
-                    content TEXT NOT NULL,
-                    timestamp TIMESTAMPTZ DEFAULT NOW()
-                );
-            """)
-            conn.commit()
-        conn.close()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS chat_history (
+                        id SERIAL PRIMARY KEY,
+                        username VARCHAR(255) NOT NULL,
+                        role VARCHAR(50) NOT NULL,
+                        content TEXT NOT NULL,
+                        timestamp TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+                conn.commit()
+        except Exception as e:
+            logging.error(f"Database setup failed: {e}")
+        finally:
+            conn.close()
 
 def run_chat_app(username: str):
     def load_user_history_from_db(user_id: str):
@@ -89,6 +93,8 @@ def run_chat_app(username: str):
                     cur.execute("SELECT role, content FROM chat_history WHERE username = %s ORDER BY timestamp ASC", (user_id,))
                     for row in cur.fetchall():
                         history.append({"role": row[0], "content": row[1]})
+            except Exception as e:
+                logging.error(f"Failed to load history for user '{user_id}': {e}")
             finally:
                 conn.close()
         return history
@@ -100,9 +106,20 @@ def run_chat_app(username: str):
                 with conn.cursor() as cur:
                     cur.execute("INSERT INTO chat_history (username, role, content) VALUES (%s, %s, %s)", (user_id, role, content))
                     conn.commit()
+            except Exception as e:
+                logging.error(f"Failed to save message for user '{user_id}': {e}")
+                st.toast("Warning: Message not saved to database.", icon="")
             finally:
                 conn.close()
 
+    if "current_user" not in st.session_state or st.session_state.current_user != username:
+        st.session_state.current_user = username
+        st.session_state.messages = load_user_history_from_db(username)
+        if "llm" in st.session_state:
+            del st.session_state.llm
+        if "agents" in st.session_state:
+            del st.session_state.agents
+    
     if "messages" not in st.session_state:
         st.session_state.messages = load_user_history_from_db(username)
 
@@ -118,9 +135,10 @@ def run_chat_app(username: str):
     st.markdown(f"Welcome, **{st.session_state['name']}**! I'm your AI companion.")
 
     with st.expander("Controls"):
-        if authenticator.logout('Logout', 'main'):
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
+        logout_clicked = authenticator.logout('Logout', 'main')
+        
+        if logout_clicked:
+            st.session_state.clear()
             st.toast("You have been successfully logged out.", icon="")
             st.rerun()
 
@@ -131,14 +149,15 @@ def run_chat_app(username: str):
                     with conn.cursor() as cur:
                         cur.execute("DELETE FROM chat_history WHERE username = %s", (username,))
                         conn.commit()
-                    st.toast("Chat history cleared!", icon="✅")
+                    st.toast("Chat history cleared!", icon="")
                     logging.info(f"Chat history cleared for user '{username}'.")
+                    st.session_state.messages = []
                 except Exception as e:
                     st.error("Failed to clear history from database.")
+                    logging.error(f"Failed to clear history for user '{username}': {e}")
                 finally:
                     conn.close()
-            st.session_state.messages = []
-            st.rerun()
+                st.rerun()
 
     selected_agent = st.selectbox("Choose an Agent:", options=["Auto", "Motivation", "Teaching"])
     st.divider()
@@ -155,17 +174,19 @@ def run_chat_app(username: str):
     if prompt := st.chat_input("What's on your mind?"):
         if not check_and_log_request(username):
             st.warning("Rate limit reached. Please wait a minute.")
-        else:
-            logging.info(f"User '{username}' prompt: '{prompt}'")
-            
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            save_message_to_db(username, "user", prompt)
-            
-            with st.chat_message("user"):
-                st.markdown(prompt)
-            
-            with st.chat_message("assistant"):
-                with st.spinner("Agent is thinking..."):
+            st.stop()
+        
+        logging.info(f"User '{username}' prompt: '{prompt}'")
+        
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        save_message_to_db(username, "user", prompt)
+        
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        
+        with st.chat_message("assistant"):
+            with st.spinner("Agent is thinking..."):
+                try:
                     response_stream, agent_name = route_and_respond(
                         user_input=prompt,
                         chat_history=st.session_state.messages,
@@ -174,17 +195,22 @@ def run_chat_app(username: str):
                         preferred_agent_name=selected_agent,
                         stream=True 
                     )
-                
-                st.markdown(f"**[{agent_name} Agent says]:**")
-                full_response_content = st.write_stream(response_stream)
-            
-            full_assistant_message = f"[{agent_name} Agent says]: {full_response_content}"
-            st.session_state.messages.append({"role": "assistant", "content": full_assistant_message})
-            save_message_to_db(username, "assistant", full_assistant_message)
-            
-            st.rerun()
+                    
+                    st.markdown(f"**[{agent_name} Agent says]:**")
+                    full_response_content = st.write_stream(response_stream)
+                    
+                    # Save assistant response
+                    full_assistant_message = f"[{agent_name} Agent says]: {full_response_content}"
+                    st.session_state.messages.append({"role": "assistant", "content": full_assistant_message})
+                    save_message_to_db(username, "assistant", full_assistant_message)
+                    
+                except Exception as e:
+                    st.error("An error occurred while processing your request.")
+                    logging.error(f"Error in route_and_respond for user '{username}': {e}")
+                    if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+                        st.session_state.messages.pop()
 
-st.title("ADHD Study Group ")
+st.title("ADHD Study Group 🚀")
 
 setup_database()
 
@@ -197,6 +223,7 @@ if st.session_state.get("authentication_status"):
 elif st.session_state.get("authentication_status") is False:
     st.error('Username/password is incorrect.')
     username = st.session_state.get("username")
-    if username: logging.warning(f"Failed login for user: '{username}'")
+    if username: 
+        logging.warning(f"Failed login for user: '{username}'")
 elif st.session_state.get("authentication_status") is None:
     st.info('Please enter your username and password.')
