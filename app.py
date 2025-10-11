@@ -3,6 +3,8 @@ import os
 import json
 import yaml
 import logging
+import psycopg2 
+from datetime import datetime
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 import nest_asyncio
@@ -49,20 +51,66 @@ try:
 except Exception as e:
     st.error(f"Error initializing authenticator: {e}")
     st.stop()
+    
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+def get_db_connection():
+    """Establishes a connection to the PostgreSQL database."""
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        return conn
+    except Exception as e:
+        logging.error(f"Database connection failed: {e}")
+        st.toast("Error: Could not connect to the database.", icon="🔥")
+        return None
+
+def setup_database():
+    """Ensures the chat_history table exists. Runs only once."""
+    conn = get_db_connection()
+    if conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS chat_history (
+                    id SERIAL PRIMARY KEY,
+                    username VARCHAR(255) NOT NULL,
+                    role VARCHAR(50) NOT NULL,
+                    content TEXT NOT NULL,
+                    timestamp TIMESTAMPTZ DEFAULT NOW()
+                );
+            """)
+            conn.commit()
+        conn.close()
 
 def run_chat_app(username: str):
-    def load_user_history(user_id: str):
-        filepath = f"{user_id}_chat_history.json"
-        if os.path.exists(filepath):
-            with open(filepath, "r") as f: return json.load(f)
-        return []
+    def load_user_history_from_db(user_id: str):
+        """Loads a user's entire chat history from the database."""
+        history = []
+        conn = get_db_connection()
+        if conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT role, content FROM chat_history WHERE username = %s ORDER BY timestamp ASC",
+                    (user_id,)
+                )
+                for row in cur.fetchall():
+                    history.append({"role": row[0], "content": row[1]})
+            conn.close()
+        return history
 
-    def save_user_history(user_id: str, messages: list):
-        filepath = f"{user_id}_chat_history.json"
-        with open(filepath, "w") as f: json.dump(messages, f)
+    def save_message_to_db(user_id: str, role: str, content: str):
+        """Saves a single new message to the database."""
+        conn = get_db_connection()
+        if conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO chat_history (username, role, content) VALUES (%s, %s, %s)",
+                    (user_id, role, content)
+                )
+                conn.commit()
+            conn.close()
 
     if "full_persistent_history" not in st.session_state:
-        st.session_state.full_persistent_history = load_user_history(username)
+        st.session_state.full_persistent_history = load_user_history_from_db(username)
     
     if "display_messages" not in st.session_state:
         st.session_state.display_messages = list(st.session_state.full_persistent_history)
@@ -81,9 +129,14 @@ def run_chat_app(username: str):
     with st.expander("Controls"):
         authenticator.logout('Logout', 'main')
         if st.button("Clear My Chat History"):
+            conn = get_db_connection()
+            if conn:
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM chat_history WHERE username = %s", (username,))
+                    conn.commit()
+                conn.close()
             st.session_state.display_messages = []
             st.session_state.full_persistent_history = []
-            save_user_history(username, [])
             st.rerun()
 
     selected_agent = st.selectbox("Choose an Agent:", options=["Auto", "Motivation", "Teaching"])
@@ -104,6 +157,7 @@ def run_chat_app(username: str):
             logging.info(f"User '{username}' prompt: '{prompt}'")
             st.session_state.display_messages.append({"role": "user", "content": prompt})
             st.session_state.full_persistent_history.append({"role": "user", "content": prompt})
+            save_message_to_db(username, "user", prompt) 
             st.rerun()
 
     if st.session_state.display_messages and st.session_state.display_messages[-1]["role"] == "user":
@@ -121,7 +175,6 @@ def run_chat_app(username: str):
                 )
             
             st.markdown(f"**[{agent_name} Agent says]:**")
-            
             full_response_content = st.write_stream(response_stream)
         
         full_assistant_message = f"[{agent_name} Agent says]: {full_response_content}"
@@ -129,12 +182,12 @@ def run_chat_app(username: str):
         st.session_state.display_messages.append({"role": "assistant", "content": full_assistant_message})
         st.session_state.full_persistent_history.append({"role": "assistant", "content": full_assistant_message})
         
-        save_user_history(username, st.session_state.full_persistent_history)
-        
+        save_message_to_db(username, "assistant", full_assistant_message) # <-- Save assistant message to DB
         st.rerun()
 
-
 st.title("ADHD Study Group ")
+
+setup_database()
 
 authenticator.login(fields={'Form name': 'Login', 'Username': 'Username', 'Password': 'Password'})
 

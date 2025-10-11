@@ -6,3 +6,4 @@ nest-asyncio
 streamlit-authenticator
 PyYAML
 bcrypt
+psycopg2-binary
