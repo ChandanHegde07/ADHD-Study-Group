@@ -63,6 +63,7 @@ def get_db_connection():
         st.toast("Error: Could not connect to the database.", icon="🔥")
         return None
 
+@st.cache_resource
 def setup_database():
     conn = get_db_connection()
     if conn:
@@ -78,6 +79,7 @@ def setup_database():
                     );
                 """)
                 conn.commit()
+            logging.info("Database table verified/created successfully.")
         except Exception as e:
             logging.error(f"Database setup failed: {e}")
         finally:
@@ -108,19 +110,14 @@ def run_chat_app(username: str):
                     conn.commit()
             except Exception as e:
                 logging.error(f"Failed to save message for user '{user_id}': {e}")
-                st.toast("Warning: Message not saved to database.", icon="")
+                st.toast("Warning: Could not save message to database.", icon="⚠️")
             finally:
                 conn.close()
 
     if "current_user" not in st.session_state or st.session_state.current_user != username:
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
         st.session_state.current_user = username
-        st.session_state.messages = load_user_history_from_db(username)
-        if "llm" in st.session_state:
-            del st.session_state.llm
-        if "agents" in st.session_state:
-            del st.session_state.agents
-    
-    if "messages" not in st.session_state:
         st.session_state.messages = load_user_history_from_db(username)
 
     if "llm" not in st.session_state:
@@ -135,11 +132,10 @@ def run_chat_app(username: str):
     st.markdown(f"Welcome, **{st.session_state['name']}**! I'm your AI companion.")
 
     with st.expander("Controls"):
-        logout_clicked = authenticator.logout('Logout', 'main')
-        
-        if logout_clicked:
-            st.session_state.clear()
-            st.toast("You have been successfully logged out.", icon="")
+        if authenticator.logout('Logout', 'main'):
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.toast("You have been successfully logged out.", icon="👋")
             st.rerun()
 
         if st.button("Clear My Chat History"):
@@ -149,15 +145,18 @@ def run_chat_app(username: str):
                     with conn.cursor() as cur:
                         cur.execute("DELETE FROM chat_history WHERE username = %s", (username,))
                         conn.commit()
-                    st.toast("Chat history cleared!", icon="")
+                        deleted_count = cur.rowcount
+                    st.toast(f"Chat history cleared! ({deleted_count} messages deleted)", icon="✅")
                     logging.info(f"Chat history cleared for user '{username}'.")
                     st.session_state.messages = []
+                    st.rerun()
                 except Exception as e:
-                    st.error("Failed to clear history from database.")
+                    st.error(f"Failed to clear history from database: {str(e)}")
                     logging.error(f"Failed to clear history for user '{username}': {e}")
                 finally:
                     conn.close()
-                st.rerun()
+            else:
+                st.error("Could not connect to database.")
 
     selected_agent = st.selectbox("Choose an Agent:", options=["Auto", "Motivation", "Teaching"])
     st.divider()
@@ -166,27 +165,25 @@ def run_chat_app(username: str):
         with st.chat_message("assistant"):
             st.markdown("**Motivation Agent**")
             st.markdown("Hello! How can I help you today?")
-    
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+    else:
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
 
     if prompt := st.chat_input("What's on your mind?"):
         if not check_and_log_request(username):
             st.warning("Rate limit reached. Please wait a minute.")
-            st.stop()
-        
-        logging.info(f"User '{username}' prompt: '{prompt}'")
-        
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        save_message_to_db(username, "user", prompt)
-        
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        
-        with st.chat_message("assistant"):
-            with st.spinner("Agent is thinking..."):
-                try:
+        else:
+            logging.info(f"User '{username}' prompt: '{prompt}'")
+            
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            save_message_to_db(username, "user", prompt)
+            
+            with st.chat_message("user"):
+                st.markdown(prompt)
+            
+            with st.chat_message("assistant"):
+                with st.spinner("Agent is thinking..."):
                     response_stream, agent_name = route_and_respond(
                         user_input=prompt,
                         chat_history=st.session_state.messages,
@@ -195,20 +192,15 @@ def run_chat_app(username: str):
                         preferred_agent_name=selected_agent,
                         stream=True 
                     )
-                    
-                    st.markdown(f"**[{agent_name} Agent says]:**")
-                    full_response_content = st.write_stream(response_stream)
-                    
-                    # Save assistant response
-                    full_assistant_message = f"[{agent_name} Agent says]: {full_response_content}"
-                    st.session_state.messages.append({"role": "assistant", "content": full_assistant_message})
-                    save_message_to_db(username, "assistant", full_assistant_message)
-                    
-                except Exception as e:
-                    st.error("An error occurred while processing your request.")
-                    logging.error(f"Error in route_and_respond for user '{username}': {e}")
-                    if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-                        st.session_state.messages.pop()
+                
+                st.markdown(f"**[{agent_name} Agent says]:**")
+                full_response_content = st.write_stream(response_stream)
+            
+            full_assistant_message = f"[{agent_name} Agent says]: {full_response_content}"
+            st.session_state.messages.append({"role": "assistant", "content": full_assistant_message})
+            save_message_to_db(username, "assistant", full_assistant_message)
+            
+            st.rerun()
 
 st.title("ADHD Study Group 🚀")
 
