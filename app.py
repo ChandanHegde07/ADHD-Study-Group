@@ -80,12 +80,6 @@ def setup_database():
         conn.close()
 
 def run_chat_app(username: str):
-    if authenticator.logout('Logout', 'main'):
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.toast("You have been successfully logged out.", icon="")
-        st.rerun()
-
     def load_user_history_from_db(user_id: str):
         history = []
         conn = get_db_connection()
@@ -124,6 +118,12 @@ def run_chat_app(username: str):
     st.markdown(f"Welcome, **{st.session_state['name']}**! I'm your AI companion.")
 
     with st.expander("Controls"):
+        if authenticator.logout('Logout', 'main'):
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.toast("You have been successfully logged out.", icon="")
+            st.rerun()
+
         if st.button("Clear My Chat History"):
             conn = get_db_connection()
             if conn:
@@ -131,7 +131,7 @@ def run_chat_app(username: str):
                     with conn.cursor() as cur:
                         cur.execute("DELETE FROM chat_history WHERE username = %s", (username,))
                         conn.commit()
-                    st.toast("Chat history cleared!", icon="")
+                    st.toast("Chat history cleared!", icon="✅")
                     logging.info(f"Chat history cleared for user '{username}'.")
                 except Exception as e:
                     st.error("Failed to clear history from database.")
@@ -143,6 +143,11 @@ def run_chat_app(username: str):
     selected_agent = st.selectbox("Choose an Agent:", options=["Auto", "Motivation", "Teaching"])
     st.divider()
 
+    if not st.session_state.messages:
+        with st.chat_message("assistant"):
+            st.markdown("**Motivation Agent**")
+            st.markdown("Hello! How can I help you today?")
+    
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
@@ -163,7 +168,7 @@ def run_chat_app(username: str):
                 with st.spinner("Agent is thinking..."):
                     response_stream, agent_name = route_and_respond(
                         user_input=prompt,
-                        chat_history=st.session_state.messages, 
+                        chat_history=st.session_state.messages,
                         agents=st.session_state.agents,
                         llm=st.session_state.llm,
                         preferred_agent_name=selected_agent,
@@ -177,6 +182,7 @@ def run_chat_app(username: str):
             st.session_state.messages.append({"role": "assistant", "content": full_assistant_message})
             save_message_to_db(username, "assistant", full_assistant_message)
             
+            st.rerun()
 
 st.title("ADHD Study Group ")
 
