@@ -60,7 +60,7 @@ def get_db_connection():
         return conn
     except Exception as e:
         logging.error(f"Database connection failed: {e}")
-        st.toast("Error: Could not connect to the database.", icon="🔥")
+        st.toast("Error: Could not connect to the database.", icon="")
         return None
 
 @st.cache_resource
@@ -110,7 +110,7 @@ def run_chat_app(username: str):
                     conn.commit()
             except Exception as e:
                 logging.error(f"Failed to save message for user '{user_id}': {e}")
-                st.toast("Warning: Could not save message to database.", icon="⚠️")
+                st.toast("Warning: Could not save message to database.", icon="")
             finally:
                 conn.close()
 
@@ -135,7 +135,7 @@ def run_chat_app(username: str):
         if authenticator.logout('Logout', 'main'):
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
-            st.toast("You have been successfully logged out.", icon="👋")
+            st.toast("You have been successfully logged out.", icon="")
             st.rerun()
 
         if st.button("Clear My Chat History"):
@@ -146,7 +146,7 @@ def run_chat_app(username: str):
                         cur.execute("DELETE FROM chat_history WHERE username = %s", (username,))
                         conn.commit()
                         deleted_count = cur.rowcount
-                    st.toast(f"Chat history cleared! ({deleted_count} messages deleted)", icon="✅")
+                    st.toast(f"Chat history cleared! ({deleted_count} messages deleted)", icon="")
                     logging.info(f"Chat history cleared for user '{username}'.")
                     st.session_state.messages = []
                     st.rerun()
@@ -202,7 +202,7 @@ def run_chat_app(username: str):
             
             st.rerun()
 
-st.title("ADHD Study Group 🚀")
+st.title("ADHD Study Group ")
 
 setup_database()
 
